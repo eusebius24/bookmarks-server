@@ -1,3 +1,4 @@
+const path = require('path')
 const express = require('express');
 const xss = require('xss')
 
@@ -72,7 +73,7 @@ bookmarksRouter
             .then(bookmark => {
                 res
                     .status(201)
-                    .location(`/bookmarks/${bookmark.id}`)
+                    .location(path.posix.join(req.originalUrl, `/${bookmark.id}`))
                     .json({
                         id: bookmark.id,
                         title: xss(bookmark.title),
@@ -86,24 +87,27 @@ bookmarksRouter
 
 bookmarksRouter
     .route('/:bookmark_id')
-    .get((req, res, next) => {
-        const knexInstance = req.app.get('db')
-        BookmarksService.getById(knexInstance, req.params.bookmark_id)
+    .all((req, res, next) => {
+        BookmarksService.getById(req.app.get('db'), req.params.bookmark_id)
             .then(bookmark => {
                 if(!bookmark) {
                     return res.status(404).json({
                         error: { message: `Bookmark doesn't exist` }
                     })
                 }
-                res.json({
-                    id: bookmark.id,
-                    title: xss(bookmark.title),
-                    url: bookmark.url,
-                    description: xss(bookmark.description),
-                    rating: bookmark.rating,
-                })
+                res.bookmark = bookmark
+                next()
             })
             .catch(next)
+    })
+    .get((req, res, next) => {
+        res.json({
+            id: res.bookmark.id,
+            title: xss(res.bookmark.title),
+            url: res.bookmark.url,
+            description: xss(res.bookmark.description),
+            rating: res.bookmark.rating,
+        })
     })
     .delete((req, res, next) => {
         BookmarksService.deleteBookmark(
@@ -115,6 +119,28 @@ bookmarksRouter
             })
             .catch(next)
     })
-    
+    .patch(jsonParser, (req, res, next) => {
+        const { title, url, description, rating } = req.body 
+        const bookmarkToUpdate = { title, url, description, rating }
+
+        const numberOfValues = Object.values(bookmarkToUpdate).filter(Boolean).length
+        if (numberOfValues === 0) {
+            return res.status(400).json({
+                error: {
+                    message: `Request body must contain either 'title', 'url', description', or 'rating'`
+                }
+            })
+        }
+
+        BookmarksService.updateBookmark(
+            req.app.get('db'),
+            req.params.bookmark_id,
+            bookmarkToUpdate
+        )
+            .then(numRowsAffected => {
+                res.status(204).end()
+            })
+            .catch(next)
+    })
 
 module.exports = bookmarksRouter

@@ -17,7 +17,7 @@ app.use(helmet())
 app.use(cors())
 app.use(express.json())
 
-app.use('/bookmarks', bookmarksRouter)
+app.use('/api/bookmarks', bookmarksRouter)
 
 
 
